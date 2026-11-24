@@ -1,9 +1,140 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <base target="_top">
-  </head>
-  <body>
-    
-  </body>
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Training</title>
+<style>
+:root{--ink:#2B2B28;--sub:#7A776E;--line:#E8E4DA;--bg:#F6F4EE;--card:#fff;--g:#639922;--y:#E0901F;--r:#D9443F;--b:#378ADD;--pk:#C2557A}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif}
+main,#lock{max-width:640px;margin:0 auto;padding:14px}
+.c{background:var(--card);border-radius:10px;padding:12px 14px;margin-bottom:10px;border:1px solid var(--line)}
+h2{font-size:13px;color:var(--sub);margin:0 0 8px;font-weight:600}
+.top{display:flex;justify-content:space-between;align-items:baseline;margin:4px 2px 10px}
+.top b{font-size:16px}.top span{font-size:12px;color:var(--sub)}
+.ban{border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:14px}
+.l0{background:#EAF3DE}.l1{background:#FAEEDA}.l2{background:#FCEBEB}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.r{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line);font-size:13px}
+.r:first-of-type{border-top:0}.r .v{color:var(--sub);text-align:right;font-size:12px}
+.bar{height:6px;background:#EEE;border-radius:3px;margin-top:4px;overflow:hidden}.bar i{display:block;height:6px;background:var(--b)}
+.day{padding:8px 0;border-top:1px solid var(--line)}.day:first-of-type{border-top:0}
+.day.now{background:#F0F6FC;margin:0 -14px;padding:8px 14px}
+.dh{display:flex;justify-content:space-between;font-weight:600;font-size:13px}
+.pl,.ac{font-size:12px;color:var(--sub);margin-top:2px}.ac{color:var(--ink)}
+.pill{font-size:11px;padding:1px 7px;border-radius:9px;font-weight:600}
+.ok{background:#EAF3DE;color:#3B6D11}.pt{background:#FAEEDA;color:#854F0B}.no{background:#FCEBEB;color:#A32D2D}.ex{background:#EEECE6;color:#5A5850}
+.dd{display:flex;gap:8px}.dd div{flex:1;background:#F1EFE8;border-radius:8px;padding:8px 10px}
+.dd small{display:block;font-size:11px;color:var(--sub)}.dd b{font-size:18px}
+.fl{color:#A32D2D;font-size:12px}
+svg{width:100%;height:auto;display:block}
+.leg{font-size:11px;color:var(--sub);margin-top:4px}
+#lock .c{margin-top:18vh}
+input[type=password]{width:100%;padding:10px;font-size:16px;border:1px solid var(--line);border-radius:8px;margin:8px 0}
+button{width:100%;padding:10px;font-size:15px;border:0;border-radius:8px;background:#33413F;color:#fff}
+.msg{color:var(--r);font-size:13px;min-height:18px;margin-top:6px}
+.out{font-size:12px;color:var(--sub);text-align:center;margin:14px 0}.out a{color:var(--sub)}
+</style>
+</head>
+<body>
+<div id="lock"><div class="c">
+  <h2>훈련 대시보드</h2>
+  <input type="password" id="pw" placeholder="비밀번호" autocomplete="current-password">
+  <label style="font-size:13px;color:var(--sub)"><input type="checkbox" id="rem" checked> 이 기기에서 기억하기</label>
+  <button id="go">열기</button><div class="msg" id="msg"></div>
+</div></div>
+<main id="app" hidden></main>
+<script>
+const $=id=>document.getElementById(id);
+const b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+const ub64=u=>{let s='';u.forEach(x=>s+=String.fromCharCode(x));return btoa(s)};
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const hm=h=>{const m=Math.round((+h||0)*60);return Math.floor(m/60)+':'+('0'+m%60).slice(-2)};
+const COL=['var(--g)','var(--y)','var(--r)','#C9C6BD'];
+const dot=l=>`<span class="dot" style="background:${COL[l]||COL[3]}"></span>`;
+const S=window.crypto&&crypto.subtle;
+let ENC=null;
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
+
+async function load(){const r=await fetch('data.json?t='+Date.now(),{cache:'no-store'});
+  if(r.status===404)throw new Error('data.json이 아직 없습니다. 업로드 직후면 1~2분 뒤 새로고침하세요 (404)');
+  if(!r.ok)throw new Error('데이터를 불러오지 못했습니다 ('+r.status+')');return r.json()}
+async function derive(pw,e){const base=await S.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveBits']);
+  return new Uint8Array(await S.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:b64(e.salt),iterations:e.iter},base,512))}
+async function open_(e,k){const iv=b64(e.iv),ct=b64(e.ct),m=new Uint8Array(iv.length+ct.length);m.set(iv);m.set(ct,iv.length);
+  const hk=await S.importKey('raw',k.slice(32),{name:'HMAC',hash:'SHA-256'},false,['verify']);
+  if(!await S.verify('HMAC',hk,b64(e.mac),m))throw new Error('비밀번호가 맞지 않습니다');
+  const ak=await S.importKey('raw',k.slice(0,32),'AES-CTR',false,['decrypt']);
+  return JSON.parse(new TextDecoder().decode(await S.decrypt({name:'AES-CTR',counter:iv,length:32},ak,ct)))}
+
+async function start(){
+  if(!S){$('msg').textContent='이 브라우저는 암호 해제를 지원하지 않습니다 (https 주소로 여세요)';return}
+  try{ENC=await load()}catch(e){$('msg').textContent=e.message;return}
+  const saved=store.get('tk'),salt=store.get('ts');
+  if(saved&&salt===ENC.salt){try{render(await open_(ENC,b64(saved)));return}catch(e){store.del('tk')}}
+  $('pw').focus();
+}
+async function unlock(){
+  $('msg').textContent='여는 중…';
+  try{if(!ENC)ENC=await load();
+    const k=await derive($('pw').value,ENC),d=await open_(ENC,k);
+    if($('rem').checked){store.set('tk',ub64(k));store.set('ts',ENC.salt)}
+    render(d)}catch(e){$('msg').textContent=e.message}
+}
+$('go').onclick=unlock;$('pw').addEventListener('keydown',e=>{if(e.key==='Enter')unlock()});
+
+function row(a,b){return `<div class="r"><div>${a}</div><div class="v">${b}</div></div>`}
+function bar(p){p=Math.max(0,Math.min(100,Math.round(p||0)));return `<div class="bar"><i style="width:${p}%"></i></div>`}
+function status(d){
+  const pt=d.plan.reduce((s,p)=>s+p.tss,0),ph=d.plan.reduce((s,p)=>s+p.h,0);
+  const at=d.act.filter(a=>a.sp!=='스키').reduce((s,a)=>s+(+a.tss||0),0),ah=d.act.filter(a=>a.sp!=='스키').reduce((s,a)=>s+(+a.h||0),0);
+  if(!d.past&&!d.today)return d.plan.length?'<span class="pill ex">예정</span>':'';
+  if(!d.plan.length)return d.act.length?'<span class="pill ex">계획 외</span>':(d.past?'<span class="pill ex">휴식</span>':'');
+  if(!d.act.length)return d.today?'<span class="pill ex">예정</span>':'<span class="pill no">미실시</span>';
+  const r=pt?at/pt:(ph?ah/ph:0);
+  return r>=0.8?`<span class="pill ok">완료 ${Math.round(r*100)}%</span>`:`<span class="pill pt">부분 ${Math.round(r*100)}%</span>`;
+}
+function chart(f){
+  const pts=f.filter(x=>x[1]!=null);if(pts.length<2)return '<div class="leg">데이터 수집 중</div>';
+  const W=600,H=150,P=24,vals=pts.flatMap(x=>[x[1],x[2],x[3]]).filter(v=>v!=null);
+  const lo=Math.min(0,...vals),hi=Math.max(...vals)+5,X=i=>P+i*(W-2*P)/(pts.length-1),Y=v=>H-P-(v-lo)*(H-2*P)/(hi-lo||1);
+  const line=(k,c)=>`<polyline fill="none" stroke="${c}" stroke-width="2" points="${pts.map((x,i)=>x[k]==null?'':X(i)+','+Y(x[k])).join(' ')}"/>`;
+  const z=`<line x1="${P}" x2="${W-P}" y1="${Y(0)}" y2="${Y(0)}" stroke="#DDD"/>`;
+  const tsb=pts.map((x,i)=>x[3]==null?'':`<rect x="${X(i)-2}" width="4" y="${Math.min(Y(0),Y(x[3]))}" height="${Math.abs(Y(x[3])-Y(0))}" fill="${x[3]<-20?'#E8A3A1':'#C9D9B5'}"/>`).join('');
+  const L=pts[pts.length-1].map((v,i)=>i&&v!=null?Math.round(v):v);
+  return `<svg viewBox="0 0 ${W} ${H}">${z}${tsb}${line(1,'#378ADD')}${line(2,'#C2557A')}
+    <text x="${P}" y="14" font-size="11" fill="#7A776E">${esc(pts[0][0])}</text><text x="${W-P}" y="14" font-size="11" fill="#7A776E" text-anchor="end">${esc(L[0])}</text></svg>
+    <div class="leg"><span style="color:#378ADD">■ CTL ${L[1]}</span> · <span style="color:#C2557A">■ ATL ${L[2]}</span> · TSB ${L[3]}</div>`;
+}
+function render(d){
+  $('lock').hidden=true;const a=$('app');a.hidden=false;let h='';
+  h+=`<div class="top"><b>${esc(d.week?d.week.label:'훈련')}</b><span>${esc(d.gen)} 갱신</span></div>`;
+  h+=`<div class="ban l${d.cond.level}">${dot(d.cond.level)}${esc(d.cond.msg)}</div>`;
+  if(d.races&&d.races.length)h+=`<div class="dd" style="margin-bottom:10px">${d.races.map(r=>`<div><small>${esc(r.n)} (${esc(r.g)}) · ${esc(r.dt)}</small><b>D-${r.d}</b></div>`).join('')}</div>`;
+  const td=d.days.find(x=>x.today);
+  if(td)h+=`<div class="c"><h2>오늘 ${esc(td.d)}</h2>${td.plan.length?td.plan.map(p=>row(`${esc(p.sp)} · ${esc(p.n)}`,`${p.h?hm(p.h):''}${p.tss?' · TSS '+p.tss:''}${p.desc?'<br>'+esc(p.desc):''}`)).join(''):row('계획 없음','휴식 또는 자유')}
+    ${td.act.length?td.act.map(x=>row('✓ '+esc(x.n),`${hm(x.h)} · TSS ${x.tss}`)).join(''):''}</div>`;
+  if(d.week){const w=d.week;h+=`<div class="c"><h2>이번 주</h2>
+    ${row('시간 '+hm(w.h)+' / '+w.th+'h'+bar(w.th?w.h/w.th*100:0),w.th?Math.round(w.h/w.th*100)+'%':'')}
+    ${row('TSS '+w.tss+' / '+w.tt+bar(w.tt?w.tss/w.tt*100:0),w.tt?Math.round(w.tss/w.tt*100)+'%':'')}
+    ${w.key?row('핵심 세션',esc(w.key)):''}${w.memo?row('메모',esc(w.memo)):''}</div>`}
+  h+=`<div class="c"><h2>요일별 계획 · 실제</h2>${d.days.map(x=>`<div class="day${x.today?' now':''}"><div class="dh"><span>${esc(x.d)}</span>${status(x)}</div>
+    ${x.plan.length?`<div class="pl">계획: ${x.plan.map(p=>esc(p.sp+' '+p.n)+(p.h?' '+hm(p.h):'')).join(' + ')}</div>`:''}
+    ${x.act.length?`<div class="ac">실제: ${x.act.map(a=>esc(a.n||a.sp)+' '+hm(a.h)+(a.km?' · '+a.km+'km':'')+' · TSS '+a.tss+(a.hr?' · ♥'+Math.round(a.hr):'')).join(' / ')}</div>`:''}
+    ${x.act.filter(a=>a.fl&&a.fl!=='달성률 제외').map(a=>`<div class="fl">${esc(a.fl)}</div>`).join('')}</div>`).join('')}</div>`;
+  h+=`<div class="c"><h2>컨디션</h2>${d.cond.items.length?d.cond.items.map(i=>row(dot(i[0])+esc(i[1]),esc(i[2]))).join(''):row('웰니스 데이터 없음','')}</div>`;
+  h+=`<div class="c"><h2>체력 추세 (최근 8주)</h2>${chart(d.fit||[])}</div>`;
+  h+=`<div class="c"><h2>날씨 (대전)</h2>${d.wx.lines.map(l=>row(esc(l[0]),esc(l[1]))).join('')}${d.wx.tips.map(t=>row(dot(1)+esc(t),'')).join('')}
+    ${d.wx.ski&&d.wx.ski.length?'<h2 style="margin-top:10px">주말 스키장</h2>'+d.wx.ski.map(l=>row(esc(l[0]),esc(l[1]))).join(''):''}</div>`;
+  if(d.alerts&&d.alerts.length)h+=`<div class="c"><h2>확인할 것 (최근 7일)</h2>${d.alerts.map(x=>row(dot(1)+esc(x[0]),esc(x[1]))).join('')}</div>`;
+  if(d.garmin&&d.garmin.length)h+=`<div class="c"><h2>가민 지표</h2>${d.garmin.map(x=>row(esc(x[0]),esc(x[1]))).join('')}</div>`;
+  h+=`<div class="out"><a href="#" id="out">이 기기에서 잠그기</a></div>`;
+  a.innerHTML=h;
+  $('out').onclick=e=>{e.preventDefault();store.del('tk');store.del('ts');location.reload()};
+}
+start();
+</script>
+</body>
 </html>
